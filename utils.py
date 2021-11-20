@@ -23,7 +23,7 @@ def combine_images(generated_images, height=None, width=None):
 
 def load_emnist_balanced(cnt):
     from scipy import io as spio
-    from keras.utils import to_categorical
+    from tensorflow.keras.utils import to_categorical
     import numpy as np
     emnist = spio.loadmat("data/matlab/emnist-balanced.mat")
     

@@ -1,10 +1,12 @@
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import keras
-from keras import layers, models, optimizers
+from tensorflow.keras import layers, models, optimizers
 from keras import backend as K
-from keras.utils import to_categorical
+from tensorflow.keras.utils import to_categorical
 from keras.layers import Dense, Reshape
 from keras.layers.core import Activation, Flatten
-from keras.layers.normalization import BatchNormalization
+from tensorflow.keras.layers import BatchNormalization
 from keras.layers.convolutional import UpSampling2D, Conv2D, MaxPooling2D
 from keras.preprocessing.image import ImageDataGenerator
 from keras import callbacks
@@ -20,14 +22,15 @@ import tensorflow as tf
 import os
 import argparse
 
+tf.compat.v1.disable_v2_behavior()
+
 K.set_image_data_format('channels_last')
 
 """
 Switching the GPU to allow growth
 """
-config = tf.ConfigProto()
-config.gpu_options.allow_growth=True
-sess = tf.Session(config=config)
+config = tf.compat.v1.ConfigProto()
+sess = tf.compat.v1.Session(config=config)
 K.set_session(sess)
 
 
@@ -44,25 +47,25 @@ def CapsNet(input_shape, n_class, routings):
     conv2 = layers.Conv2D(filters=128, kernel_size=3, strides=1, padding='valid', activation='relu', name='conv2')(conv1)
     conv3 = layers.Conv2D(filters=256, kernel_size=3, strides=2, padding='valid', activation='relu', name='conv3')(conv2)
     primarycaps = PrimaryCap(conv3, dim_capsule=8, n_channels=32, kernel_size=9, strides=2, padding='valid')
-    digitcaps = CapsuleLayer(num_capsule=n_class, dim_capsule=16, routings=routings,channels=32,name='digitcaps')(primarycaps)    
+    digitcaps = CapsuleLayer(num_capsule=n_class, dim_capsule=16, routings=routings, channels=32,name='digitcaps')(primarycaps)    
     out_caps = Length(name='capsnet')(digitcaps)
 
     """
     Decoder Network
     """
     y = layers.Input(shape=(n_class,))
-    masked_by_y = Mask()([digitcaps, y])
-    masked = Mask()(digitcaps) 
+    masked_by_y = Mask(47)([digitcaps, y])
+    masked = Mask(47)(digitcaps) 
 
     decoder = models.Sequential(name='decoder')
-    decoder.add(Dense(input_dim=16*n_class, activation="relu", output_dim=7*7*32))
+    decoder.add(Dense(input_dim=16*n_class, units=1568, activation="relu"))
     decoder.add(Reshape((7, 7, 32)))
     decoder.add(BatchNormalization(momentum=0.8))
-    decoder.add(layers.Deconvolution2D(32, 3, 3,subsample=(1, 1),border_mode='same', activation="relu"))
-    decoder.add(layers.Deconvolution2D(16, 3, 3,subsample=(2, 2),border_mode='same', activation="relu"))
-    decoder.add(layers.Deconvolution2D(8, 3, 3,subsample=(2, 2),border_mode='same', activation="relu"))
-    decoder.add(layers.Deconvolution2D(4, 3, 3,subsample=(1, 1),border_mode='same', activation="relu"))
-    decoder.add(layers.Deconvolution2D(1, 3, 3,subsample=(1, 1),border_mode='same', activation="sigmoid"))
+    decoder.add(layers.Conv2DTranspose(32, 3, 1, padding='same', activation="relu")) # Removed dilation rate as it was not working
+    decoder.add(layers.Conv2DTranspose(16, 3, 2, padding='same', activation="relu"))
+    decoder.add(layers.Conv2DTranspose(8, 3, 2, padding='same', activation="relu"))
+    decoder.add(layers.Conv2DTranspose(4, 3, 1, padding='same', activation="relu"))
+    decoder.add(layers.Conv2DTranspose(1, 3, 1, padding='same', activation="sigmoid"))
     decoder.add(layers.Reshape(target_shape=input_shape, name='out_recon'))     
     
     """

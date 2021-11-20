@@ -1,4 +1,4 @@
-import keras.backend as K
+import tensorflow.keras.backend as K
 import tensorflow as tf
 from keras import initializers, layers
 
@@ -34,13 +34,17 @@ class Mask(layers.Layer):
         out2 = Mask()([x, y])  # out2.shape=[8,6]. Masked with true labels y. Of course y can also be manipulated.
         ```
     """
+    def __init__(self, num_classes):
+        super(Mask, self).__init__()
+        self.num_classes = num_classes
+
     def call(self, inputs, **kwargs):
         if type(inputs) is list:
             assert len(inputs) == 2
             inputs, mask = inputs
         else: 
             x = K.sqrt(K.sum(K.square(inputs), -1))
-            mask = K.one_hot(indices=K.argmax(x, 1), num_classes=x.get_shape().as_list()[1])
+            mask = K.one_hot(indices=K.argmax(x, 1), num_classes=self.num_classes)
 
         masked = K.batch_flatten(inputs * K.expand_dims(mask, -1))
         return masked
@@ -95,51 +99,48 @@ class CapsuleLayer(layers.Layer):
         self.input_dim_capsule = input_shape[2]
         
         if(self.channels!=0):
-            assert int(self.input_num_capsule/self.channels)/(self.input_num_capsule/self.channels)==1, "error"
-            self.W = self.add_weight(shape=[self.num_capsule, self.channels,
-                                            self.dim_capsule, self.input_dim_capsule],
+            assert int(self.input_num_capsule//self.channels)//(self.input_num_capsule//self.channels)==1, "error"
+            self.W = self.add_weight(shape=[self.channels, self.num_capsule,
+                                            self.dim_capsule, self.input_dim_capsule],   # [32, 47, 16, 8]
                                      initializer=self.kernel_initializer,
                                      name='W')
             
-            self.B = self.add_weight(shape=[self.num_capsule,self.dim_capsule],
+            self.B = self.add_weight(shape=[self.num_capsule,self.dim_capsule],          # [47, 16]
                                      initializer=self.kernel_initializer,
                                      name='B')
         else:
-            self.W = self.add_weight(shape=[self.num_capsule, self.input_num_capsule,
-                                            self.dim_capsule, self.input_dim_capsule],
+            self.W = self.add_weight(shape=[self.input_num_capsule, self.num_capsule,
+                                            self.dim_capsule, self.input_dim_capsule],   # [128, 47, 16, 8]
                                      initializer=self.kernel_initializer,
                                      name='W')
-            self.B = self.add_weight(shape=[self.num_capsule,self.dim_capsule],
+            self.B = self.add_weight(shape=[self.num_capsule,self.dim_capsule],          # [47, 16]
                                      initializer=self.kernel_initializer,
                                      name='B')
         
 
         self.built = True
 
-    def call(self, inputs, training=None):
-        inputs_expand = K.expand_dims(inputs, 1)
-        
-        inputs_tiled = K.tile(inputs_expand, [1, self.num_capsule, 1, 1])
-        
+    def call(self, inputs, training=None):       
         if(self.channels!=0):
-            W2 = K.repeat_elements(self.W,int(self.input_num_capsule/self.channels),1)
+            W2 = K.repeat_elements(self.W,int(self.input_num_capsule//self.channels), 0)
         else:
             W2 = self.W
-            
-        inputs_hat = K.map_fn(lambda x: K.batch_dot(x, W2, [2, 3]) , elems=inputs_tiled)
 
-        b = tf.zeros(shape=[K.shape(inputs_hat)[0], self.num_capsule, self.input_num_capsule])
+        inputs_hat = K.map_fn(lambda x: K.batch_dot(x, W2, [1, 3]) , elems=inputs)
+
+        b = tf.zeros(shape=K.shape(inputs_hat)[:-1]+[1])
 
         assert self.routings > 0, 'The routings should be > 0.'
         for i in range(self.routings):
 
-            c = tf.nn.softmax(b, dim=1)
-            outputs = squash(K.batch_dot(c, inputs_hat, [2, 2])+ self.B)
+            c = tf.nn.softmax(b, axis=1)
+            x1 = tf.reduce_sum(tf.multiply(c, inputs_hat), axis=1, keepdims=True)
+            x2 = x1 + self.B
+            outputs = squash(x2)
 
             if i < self.routings - 1:
-                b += K.batch_dot(outputs, inputs_hat, [2, 3])
-
-        return outputs
+                b += tf.reduce_sum(tf.multiply(outputs, inputs_hat), axis=3, keepdims=True)
+        return tf.squeeze(outputs)
 
     def compute_output_shape(self, input_shape):
         return tuple([None, self.num_capsule, self.dim_capsule])
