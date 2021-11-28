@@ -1,0 +1,27 @@
+{
+    "model_name" : "TextCaps V2 debug 1",
+    "comment" : "Debug",
+    "revision" : 0,
+    "dataset" : {
+        "path" : "datasets/emnist-balanced.mat",
+        "n_class" : 47
+    },
+    "model" : {
+        "routings" : 3,
+        "n_class" : 47
+    },
+    "learning_rate" : 0.001,
+    "train" : {
+        "epochs" : 60,
+        "rcn_weight" : 0.1,
+        "val_epochs" : 5,
+        "record_logs" : true,
+        "logs_path" : "logs/emnist/",
+        "load_model" : false,
+        "save_weights" : true,
+        "weights_path" : "./checkpoints/"
+    },
+    "datapipe" : {
+        "batch_size" : 32
+    }
+}
