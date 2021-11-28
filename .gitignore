@@ -1,5 +1,3 @@
-
-.vscode/settings.json
-*.pyc
-data/matlab.zip
-*.mat
+datasets/*
+logs/*
+checkpoints/*
